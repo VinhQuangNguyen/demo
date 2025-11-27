@@ -58,6 +58,12 @@
       let rewardPayload;
       let isAdReady = false;
       let isAdLoading = false;
+      let retryCount = 0;
+      let totalAttempts = 0;
+      let isCooldownActive = false;
+      const MAX_RETRIES = 3;
+      const MAX_ATTEMPTS_PER_SESSION = 10;
+      const COOLDOWN_TIME = 10000; // 10 seconds
 
       console.log("Khởi tạo hệ thống quảng cáo...");
 
@@ -99,10 +105,34 @@
 
           googletag.pubads().addEventListener("slotRenderEnded", (event) => {
             if (event.slot === rewardedSlot && event.isEmpty) {
-              console.log("Slot trống, không có quảng cáo");
+              console.log("Slot trống, không có quảng cáo...");
               isAdReady = false;
               isAdLoading = false;
-              updateStatus("Không có quảng cáo");
+
+              if (retryCount < MAX_RETRIES && totalAttempts < MAX_ATTEMPTS_PER_SESSION) {
+                retryCount++;
+                updateStatus(`Không có quảng cáo, thử lại (${retryCount}/${MAX_RETRIES})...`);
+
+                // Tăng thời gian chờ giữa các lần retry: 3s, 6s, 9s
+                const delayTime = 3000 + (retryCount * 3000);
+
+                setTimeout(() => {
+                  console.log(`Thử tải lại quảng cáo (${retryCount}/${MAX_RETRIES}) sau ${delayTime}ms...`);
+                  autoLoadNewAd();
+                }, delayTime);
+              } else {
+                updateStatus("Đã thử 3 lần, không có quảng cáo. Chờ 30 giây...");
+                retryCount = 0;
+
+                // Đợi 30 giây trước khi thử lại
+                setTimeout(() => {
+                  if (totalAttempts < MAX_ATTEMPTS_PER_SESSION) {
+                    autoLoadNewAd();
+                  } else {
+                    updateStatus("Đã thử quá nhiều lần. Vui lòng tải lại trang.");
+                  }
+                }, 30000);
+              }
             }
           });
 
@@ -140,15 +170,27 @@
           updateStatus("Quảng cáo đã đóng");
         }
 
-        // Đợi 2 giây rồi tự động tải quảng cáo mới
-        setTimeout(() => {
-          autoLoadNewAd();
-        }, 2000);
+        // Reset retry count và tự động tải quảng cáo mới sau 2 giây
+        // Chỉ auto-load nếu chưa vượt quá số lần thử tối đa VÀ chưa có quảng cáo sẵn sàng
+        retryCount = 0;
+        if (totalAttempts < MAX_ATTEMPTS_PER_SESSION && !isAdReady) {
+          setTimeout(() => {
+            autoLoadNewAd();
+          }, 2000);
+        } else if (isAdReady) {
+          console.log("Đã có quảng cáo sẵn sàng, không cần auto-load");
+          updateStatus("Quảng cáo sẵn sàng!");
+        } else {
+          updateStatus("Đã thử nhiều lần, vui lòng tải lại trang để tiếp tục.");
+        }
       }
 
       function autoLoadNewAd() {
-        if (!isAdLoading && !isAdReady) {
+        if (!isAdLoading && !isAdReady && totalAttempts < MAX_ATTEMPTS_PER_SESSION) {
           console.log("Auto-loading quảng cáo mới...");
+          console.log("Total attempts so far:", totalAttempts);
+
+          totalAttempts++;
           updateStatus("Đang tải quảng cáo mới...");
 
           isAdLoading = true;
@@ -158,6 +200,12 @@
             console.log("Đang tạo slot mới (auto)...");
             initializeAds();
           });
+        } else if (isAdReady) {
+          console.log("Quảng cáo đã sẵn sàng, không cần load thêm");
+          updateStatus("Quảng cáo đã sẵn sàng!");
+        } else if (totalAttempts >= MAX_ATTEMPTS_PER_SESSION) {
+          console.log("Đã đạt tối đa số lần thử cho phiên này");
+          updateStatus("Đã thử nhiều lần, vui lòng tải lại trang.");
         }
       }
 
@@ -169,6 +217,7 @@
         console.log("isAdLoading:", isAdLoading);
         console.log("rewardedEvent exists:", !!window.rewardedEvent);
         console.log("rewardedSlot exists:", !!rewardedSlot);
+        console.log("totalAttempts:", totalAttempts);
 
         if (isAdReady && window.rewardedEvent) {
           button.disabled = true;
@@ -180,6 +229,9 @@
           console.log("Quảng cáo đang tự động tải, vui lòng đợi...");
           updateStatus("Đang tải quảng cáo...");
           button.disabled = false;
+        } else if (totalAttempts >= MAX_ATTEMPTS_PER_SESSION) {
+          console.log("Đã vượt quá số lần thử tối đa");
+          updateStatus("Đã thử nhiều lần, vui lòng tải lại trang để tiếp tục.");
         } else if (!isAdReady) {
           console.log("Không có quảng cáo sẵn sàng, bắt đầu tải...");
           updateStatus("Đang tải quảng cáo...");
