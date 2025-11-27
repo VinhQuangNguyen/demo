@@ -139,6 +139,26 @@
         } else {
           updateStatus("Quảng cáo đã đóng");
         }
+
+        // Đợi 2 giây rồi tự động tải quảng cáo mới
+        setTimeout(() => {
+          autoLoadNewAd();
+        }, 2000);
+      }
+
+      function autoLoadNewAd() {
+        if (!isAdLoading && !isAdReady) {
+          console.log("Auto-loading quảng cáo mới...");
+          updateStatus("Đang tải quảng cáo mới...");
+
+          isAdLoading = true;
+          window.rewardedEvent = null;
+
+          googletag.cmd.push(() => {
+            console.log("Đang tạo slot mới (auto)...");
+            initializeAds();
+          });
+        }
       }
 
       function loadAd() {
@@ -156,35 +176,16 @@
           window.rewardedEvent.makeRewardedVisible();
           document.body.style.overflow = 'hidden';
           updateStatus("Đang xem quảng cáo...");
-        } else if (!isAdLoading && !isAdReady) {
-          button.disabled = true;
-          console.log("Đang tải lại quảng cáo mới...");
-          updateStatus("Đang tải lại quảng cáo...");
-
-          if (rewardedSlot) {
-            googletag.destroySlots([rewardedSlot]);
-            console.log("Đã destroy slot cũ");
-            rewardedSlot = null;
-          }
-
-          isAdReady = false;
-          isAdLoading = true;
-          window.rewardedEvent = null;
-
-          setTimeout(() => {
-            button.disabled = false;
-          }, 3000);
-
-          googletag.cmd.push(() => {
-            console.log("Đang tạo slot mới...");
-            initializeAds();
-          });
-        } else {
-          console.log("Đang tải quảng cáo, vui lòng đợi...");
+        } else if (isAdLoading) {
+          console.log("Quảng cáo đang tự động tải, vui lòng đợi...");
           updateStatus("Đang tải quảng cáo...");
-          setTimeout(() => {
-            button.disabled = false;
-          }, 1000);
+          button.disabled = false;
+        } else if (!isAdReady) {
+          console.log("Không có quảng cáo sẵn sàng, bắt đầu tải...");
+          updateStatus("Đang tải quảng cáo...");
+
+          // Nếu không có gì đang tải, bắt đầu auto-load
+          autoLoadNewAd();
         }
       }
 
