@@ -17,20 +17,37 @@
         justify-content: center;
         align-items: center;
         font-family: Arial, sans-serif;
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        height: 100%;
       }
 
       #watchAdButton {
         background: #007bff;
         color: white;
-        padding: 15px 30px;
+        padding: 20px 40px;
         border: none;
-        border-radius: 5px;
-        font-size: 16px;
+        border-radius: 8px;
+        font-size: 18px;
         cursor: pointer;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        transition: all 0.2s ease;
+        width: 80%;
+        max-width: 300px;
+        height: 60px;
+        font-weight: bold;
       }
 
-      #watchAdButton:hover {
+      #watchAdButton:active {
         background: #0056b3;
+        transform: scale(0.95);
+      }
+
+      #watchAdButton:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
       }
     </style>
 
@@ -40,44 +57,139 @@
       let rewardedSlot;
       let rewardPayload;
       let isAdReady = false;
+      let isAdLoading = false;
 
-      googletag.cmd.push(() => {
+      console.log("Khởi tạo hệ thống quảng cáo...");
+
+      function initializeAds() {
+        console.log("Đang tạo slot quảng cáo...");
         rewardedSlot = googletag.defineOutOfPageSlot(
           "/22639388115/rewarded_web_example",
           googletag.enums.OutOfPageFormat.REWARDED
         );
 
         if (rewardedSlot) {
+          console.log("Slot quảng cáo đã tạo thành công:", rewardedSlot);
           rewardedSlot.addService(googletag.pubads());
 
           googletag.pubads().addEventListener("rewardedSlotReady", (event) => {
-            isAdReady = true;
-            window.rewardedEvent = event;
+            if (event.slot === rewardedSlot) {
+              console.log("Quảng cáo đã sẵn sàng:", event);
+              isAdReady = true;
+              isAdLoading = false;
+              window.rewardedEvent = event;
+              updateStatus("Quảng cáo sẵn sàng!");
+            }
           });
 
-          googletag.pubads().addEventListener("rewardedSlotClosed", dismissRewardedAd);
+          googletag.pubads().addEventListener("rewardedSlotClosed", (event) => {
+            if (event.slot === rewardedSlot) {
+              console.log("Quảng cáo đã đóng:", event);
+              console.log("Reward payload:", rewardPayload);
+              dismissRewardedAd();
+            }
+          });
 
           googletag.pubads().addEventListener("rewardedSlotGranted", (event) => {
-            rewardPayload = event.payload;
+            if (event.slot === rewardedSlot) {
+              console.log("Đã cấp thưởng:", event.payload);
+              rewardPayload = event.payload;
+            }
           });
 
+          googletag.pubads().addEventListener("slotRenderEnded", (event) => {
+            if (event.slot === rewardedSlot && event.isEmpty) {
+              console.log("Slot trống, không có quảng cáo");
+              isAdReady = false;
+              isAdLoading = false;
+              updateStatus("Không có quảng cáo");
+            }
+          });
+
+          console.log("Đang enable services...");
           googletag.enableServices();
+          console.log("Đang display slot...");
           googletag.display(rewardedSlot);
+        } else {
+          console.log("Không thể tạo slot quảng cáo");
+          updateStatus("Không hỗ trợ quảng cáo");
         }
-      });
+      }
+
+      googletag.cmd.push(initializeAds);
 
       function dismissRewardedAd() {
+        console.log("dismissRewardedAd called, rewardPayload:", rewardPayload);
         document.body.style.overflow = '';
+        isAdReady = false;
+        window.rewardedEvent = null;
+
         if (rewardedSlot) {
           googletag.destroySlots([rewardedSlot]);
+          console.log("Slot đã bị destroy");
+          rewardedSlot = null;
+        }
+
+        const button = document.getElementById("watchAdButton");
+        button.disabled = false;
+
+        if (rewardPayload) {
+          rewardPayload = null;
+          updateStatus("Đã nhận thưởng!");
+        } else {
+          updateStatus("Quảng cáo đã đóng");
         }
       }
 
       function loadAd() {
+        const button = document.getElementById("watchAdButton");
+
+        console.log("loadAd called");
+        console.log("isAdReady:", isAdReady);
+        console.log("isAdLoading:", isAdLoading);
+        console.log("rewardedEvent exists:", !!window.rewardedEvent);
+        console.log("rewardedSlot exists:", !!rewardedSlot);
+
         if (isAdReady && window.rewardedEvent) {
+          button.disabled = true;
+          console.log("Đang hiển thị quảng cáo...");
           window.rewardedEvent.makeRewardedVisible();
           document.body.style.overflow = 'hidden';
+          updateStatus("Đang xem quảng cáo...");
+        } else if (!isAdLoading && !isAdReady) {
+          button.disabled = true;
+          console.log("Đang tải lại quảng cáo mới...");
+          updateStatus("Đang tải lại quảng cáo...");
+
+          if (rewardedSlot) {
+            googletag.destroySlots([rewardedSlot]);
+            console.log("Đã destroy slot cũ");
+            rewardedSlot = null;
+          }
+
+          isAdReady = false;
+          isAdLoading = true;
+          window.rewardedEvent = null;
+
+          setTimeout(() => {
+            button.disabled = false;
+          }, 3000);
+
+          googletag.cmd.push(() => {
+            console.log("Đang tạo slot mới...");
+            initializeAds();
+          });
+        } else {
+          console.log("Đang tải quảng cáo, vui lòng đợi...");
+          updateStatus("Đang tải quảng cáo...");
+          setTimeout(() => {
+            button.disabled = false;
+          }, 1000);
         }
+      }
+
+      function updateStatus(message) {
+        console.log("Status:", message);
       }
     </script>
   </head>
